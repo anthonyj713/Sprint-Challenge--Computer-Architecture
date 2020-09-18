@@ -10,7 +10,8 @@ class CPU:
         self.ram = [0] * 256
         self.reg = [0] * 8
         self.pc = 0 # counter
-        self.sp = 0xF3
+        self.sp = self.reg[7]
+        self.flag = 0b00000000
 
     def ram_read(self, MAR):
         return self.ram[MAR]
@@ -45,11 +46,8 @@ class CPU:
         except FileNotFoundError:
             print(f"File not found: {sys.argv[1]}")
             sys.exit(2)
-
         
-        
-
-        # For now, we've just hardcoded a program:
+         # For now, we've just hardcoded a program:
 
         # program = [
         #     # From print8.ls8
@@ -73,10 +71,31 @@ class CPU:
             self.reg[reg_a] += self.reg[reg_b]
         #elif op == "SUB": etc
         elif op == "MUL":
-            mul = self.reg[reg_a] * self.reg[reg_b]
-            self.reg[reg_a] = mul
+            self.reg[reg_a] * self.reg[reg_b]
+        elif op == "CMP":
+            self.flag = 0b00000000
+
+            if self.ram[reg_a] == self.ram[reg_b]:
+                self.flag = 0b00000001
+            else:
+                self.flag = 0b00000000
+            
+            if self.ram[reg_a] < self.ram[reg_b]:
+                self.flag = 0b00000100
+            else:
+                self.flag = 0b00000000
+
+            if self.ram[reg_a] > self.ram[reg_b]:
+                self.flag = 0b00000010
+            else:
+                self.flag = 0b00000000
+
         else:
             raise Exception("Unsupported ALU operation")
+
+    
+    def jump(self, operand_a):
+        self.pc = self.reg[operand_a]
 
     def trace(self):
         """
@@ -112,8 +131,6 @@ class CPU:
         """Run the CPU."""
         self.trace()
 
-        running = True
-
         HLT = 0b00000001
         LDI = 0b10000010
         PRN = 0b01000111
@@ -122,33 +139,58 @@ class CPU:
         POP = 0b01000110
         CALL = 0b01010000
         RET = 0b00010001
+        CMP = 0b10100111
+        JMP = 0b01010100
+        JNE = 0b01010110
+        JEQ = 0b01010101
+
+        running = True
 
         while running:
-            ir = self.ram[self.pc]
+            self.trace()
+            IR = self.ram[self.pc]
 
             operand_a = self.ram_read(self.pc + 1)
             operand_b = self.ram_read(self.pc + 2)
 
-            if ir == LDI:
-                self.reg[operand_a]= operand_b
+            if IR == LDI:
+                self.reg[operand_a] = operand_b
                 self.pc += 3
-            elif ir == PRN:
+            elif IR == PRN:
                 print(self.reg[operand_a])
                 self.pc += 2
-            elif ir == MUL:
+            elif IR == MUL:
                 self.alu("MUL", operand_a, operand_b)
                 self.pc += 3
-            elif ir == PUSH:
+            elif IR == PUSH:
                 self.push(operand_a)
                 self.pc += 2
-            elif ir == POP:
+            elif IR == POP:
                 self.pop(operand_a)
                 self.pc += 2
-            elif ir == CALL:
+            elif IR == CALL:
                 self.push(operand_a)
                 self.ram[self.sp] = self.pc + 2
                 self.pc = self.reg[operand_a]
-            elif ir == RET:
+            elif IR == RET:
                 self.pc = self.ram[self.sp]
-            elif ir == HLT:
+            elif IR == CMP:
+                self.alu("CMP", self.reg[operand_a], self.reg[operand_b])
+                self.pc += 3
+            elif IR == JMP:
+                self.pc = self.reg[operand_a]
+            elif IR == JNE:
+                if self.flag == 0b00000000:
+                    self.jump(operand_a)
+                else:
+                    self.pc += 2
+            elif IR == JEQ:
+                if self.flag == 0b00000001:
+                    self.jump(operand_a)
+                else:
+                    self.pc += 2
+            elif IR == HLT:
+                running = False
+            else:
+                print("Invalid command")
                 running = False
